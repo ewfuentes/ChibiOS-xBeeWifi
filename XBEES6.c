@@ -16,6 +16,19 @@
 volatile uint8_t dataAvailable = TRUE;
 volatile uint16_t dataTxSize = 0;
 
+#define MAILBOX_SIZE 10
+#define MESSAGE_POOL_SIZE MAILBOX_SIZE * 2
+Mailbox unusedMessagesMB;
+Mailbox toLowLevelMB;
+Mailbox toHighLevelMB;
+
+
+msg_t unusedMessagesMBBuf[MESSAGE_POOL_SIZE];
+msg_t toLowLevelMBBuf[MAILBOX_SIZE];
+msg_t toHighLevelMBBuf[MAILBOX_SIZE];
+
+XbeeMsg messagePool[MESSAGE_POOL_SIZE];
+
 static SPIConfig spi2Config = {
 		NULL, //callback
 		GPIOB, //Slave Select Port
@@ -58,7 +71,9 @@ static EXTConfig dataAvailableEXTConfig = {
   }
 };
 
-
+void resetXbee(void);
+msg_t xbeeLowLevelThread(void *arg);
+msg_t xbeeHighLevelThread(void *arg);
 
 void resetXbee(void){
 	palSetPadMode(GPIOB, GPIOB_SPI2_MOSI, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
@@ -95,8 +110,8 @@ static WORKING_AREA(xbeeS6HighLevelArea,1024);
 
 msg_t xbeeLowLevelThread(void *arg){
 	(void) arg;
-	
-	uint8_t rxBuff[256];
+	chRegSetThreadName("xBeeLow");
+	static uint8_t rxBuff[256];
 
 	while(TRUE){
 		//If there is data to receive, try to get it
@@ -111,13 +126,31 @@ msg_t xbeeLowLevelThread(void *arg){
 				//Otherwise the byte gets discarded
 				if (rxBuff[0] == 0x7E){
 					//grab the length of the packet
-					spiReceive(&SPID2,2,&rxBuff[1]);
-					uint16_t length = (rxBuff[1]<<8) + rxBuff[2];
+					spiReceive(&SPID2,2,&rxBuff[0]);
+					uint16_t length = (rxBuff[0]<<8) + rxBuff[1];
 					//receive length plus one more byte for the checksum
-					spiReceive(&SPID2,length + 1,&rxBuff[3]);
+					spiReceive(&SPID2,length + 1,&rxBuff[2]);
+					uint16_t i;
+					msg_t msgPtr = (msg_t)NULL;
+					msg_t result = chMBFetch(&unusedMessagesMB,&msgPtr,TIME_IMMEDIATE);
+					if (result == RDY_OK){
+						
+						XbeeMsg test = *((XbeeMsg *) msgPtr);
+						
+						test.length = (rxBuff[0]<<8) + rxBuff[1];
+
+						for (i = 0; i < test.length; i++){
+							test.data[i] = rxBuff[i+2];
+						}
+					
+						test.checksum = rxBuff[test.length];
+
+						chMBPost(&toHighLevelMB,((msg_t)&test)172,TIME_IMMEDIATE);
+					}
 				}
 				spiUnselect(&SPID2);
 				
+
 			}
 			spiReleaseBus(&SPID2);
 			dataAvailable = FALSE;
@@ -126,17 +159,35 @@ msg_t xbeeLowLevelThread(void *arg){
 		if (dataTxSize > 0){
 
 		}
+		chThdSleepMilliseconds(10);
 	}
 }
 
 msg_t xbeeHighLevelThread(void *arg){
 	(void) arg;
+	chRegSetThreadName("xBeeLow");
+	msg_t msgPtr=0;
+	while(TRUE){
+		if (chMBFetch(&toHighLevelMB, &msgPtr, 5000)){
+			XbeeMsg msg = *((XbeeMsg *)msgPtr);
+			(void) msg;
+		}
+	}
 }
 
 msg_t xbeeInitThread(void *arg){
 	(void) arg;
 
 	resetXbee();
+
+	chMBInit(&unusedMessagesMB,unusedMessagesMBBuf,MESSAGE_POOL_SIZE);
+	chMBInit(&toHighLevelMB, toHighLevelMBBuf, MAILBOX_SIZE);
+	chMBInit(&toLowLevelMB, toLowLevelMBBuf, MAILBOX_SIZE);
+
+	uint8_t i= 0;
+	for (i = 0; i < MESSAGE_POOL_SIZE; i++){
+		chMBPost(&unusedMessagesMB,(msg_t)(&unusedMessagesMBBuf[i]),TIME_IMMEDIATE);
+	}
 
 	chThdCreateStatic(xbeeS6LowLevelArea,sizeof(xbeeS6LowLevelArea),
                     NORMALPRIO,xbeeLowLevelThread,NULL);

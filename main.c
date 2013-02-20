@@ -9,7 +9,7 @@ int main(void) {
 
   halInit();
   chSysInit();
-
+  chRegSetThreadName("MAIN");
   chThdCreateStatic(xbeeS6WorkingArea,sizeof(xbeeS6WorkingArea),
                     NORMALPRIO,xbeeInitThread,NULL);
 
