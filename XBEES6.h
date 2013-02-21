@@ -5,9 +5,9 @@ msg_t xbeeInitThread(void *arg);
 
 typedef struct{
 	uint16_t length;
-	uint8_t frameType;
-	uint8_t data[128];
 	uint8_t checksum;
+	uint8_t _reserved;
+	uint8_t data[128];
 } XbeeMsg;
 
 #endif /* _XBEES6_H_ */
