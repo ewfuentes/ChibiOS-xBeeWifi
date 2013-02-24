@@ -89,7 +89,7 @@ CSRC = $(PORTSRC) \
        $(CHIBIOS)/os/various/chprintf.c \
        main.c \
        XBEES6.c \
-
+       newlib_stubs.c \
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
