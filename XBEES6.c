@@ -577,21 +577,26 @@ void processATCommandResponse(XbeeMsg *msg){
 	}
 }
 
-uint8_t payload[128];
+volatile uint8_t payload[128];
 volatile uint8_t dataRx = FALSE;
+volatile uint16_t dataLen;
 void processRXFrame(XbeeMsg *msg){
 	IPAddr source;
 	source.IP.byte.IP1 = msg->data[1];
 	source.IP.byte.IP2 = msg->data[2];
 	source.IP.byte.IP3 = msg->data[3];
 	source.IP.byte.IP4 = msg->data[4];
-	source.port = msg->data[7]<<8 + msg->data[8];
+	source.port = (msg->data[7]<<8) + msg->data[8];
 	(void)source;
 	uint8_t protocol = msg->data[9];
 	(void)protocol;
 	uint16_t i;
 	for (i = 0; i + 11< msg->length; i++){
 		payload[i] = msg->data[i+11];
+	}
+	dataLen = i;
+	for (;i<128; i++){
+		payload[i] = 0;
 	}
 	dataRx = TRUE;
 }

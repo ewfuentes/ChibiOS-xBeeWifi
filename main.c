@@ -2,7 +2,7 @@
 #include "hal.h"
 #include "XBEES6.h"
 #include <stdio.h>
-
+#include <string.h>
 #define TARGET_IP1 192
 #define TARGET_IP2 168
 #define TARGET_IP3 1
@@ -14,7 +14,7 @@ static WORKING_AREA(xbeeS6WorkingArea,128);
 
 extern char ipAddress[20];
 extern volatile uint8_t dataRx;
-
+extern volatile uint8_t payload[128];
 IPAddr ip = {
   {TARGET_IP},
   TARGET_PORT,
@@ -43,14 +43,17 @@ int main(void) {
     }else if(connectionStatus() == CNXN_SSID_FOUND){
       delay = 250;
     }else if(connectionStatus() == CNXN_CONNECTED){
-      delay = 500;
+      delay = 5;
       uint8_t len = snprintf(out,7,"%X",count);
       out[len] = '\r';
       out[len+1] = '\n';
       txPacket(&ip,(uint8_t *)out, len+2);
       if (dataRx == TRUE){
         dataRx = FALSE;
-
+        if (strncmp((const char *)payload,"Katie",5) == 0){
+          char out[15] = "is Awesome!!!\r\n";
+          txPacket(&ip,(uint8_t *)out,15);
+        }
         ipAddress[18] = (char)'\r';
         ipAddress[19] = (char)'\n';
         txPacket(&ip,(uint8_t *)ipAddress,20);  
